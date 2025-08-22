@@ -2,12 +2,12 @@
   <div class="min-h-screen bg-neutral-950 text-neutral-50 p-6 pb-24">
     <div class="w-full flex flex-col gap-6">
 
-      <header class="flex flex-col gap-2">
+      <header v-if="showUI" class="flex flex-col gap-2">
         <h1 class="text-2xl md:text-3xl font-bold">{{ pageTitle || 'Twitch VOD Multi-Stream Sync (Vue)' }}</h1>
       </header>
 
       <!-- Správa (vlastník) -->
-      <section class="bg-neutral-900/60 p-4 rounded-2xl flex flex-col gap-3">
+      <section v-if="showUI" class="bg-neutral-900/60 p-4 rounded-2xl flex flex-col gap-3">
         <div class="flex items-center justify-between">
           <h2 class="font-semibold">Správa</h2>
           <div class="text-xs text-neutral-400">
@@ -37,7 +37,7 @@
       </section>
 
       <!-- Globální čas / synchronizace + FILTRY -->
-      <section class="bg-neutral-900/60 p-4 rounded-2xl flex flex-col gap-3">
+      <section v-if="showUI" class="bg-neutral-900/60 p-4 rounded-2xl flex flex-col gap-3">
         <div class="flex flex-wrap items-center gap-3">
           <div class="text-lg font-semibold">Globální čas T: <span class="tabular-nums">{{ formatHMS(globalElapsed) }}</span></div>
           <button @click="syncToCurrentGlobal" class="px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-sm">Synchronizovat na T</button>
@@ -81,7 +81,7 @@
       </section>
 
       <!-- Hlavní layout: vlevo přehrávače, vpravo kapitoly -->
-      <div class="grid gap-6" style="grid-template-columns: 1fr minmax(260px, 18vw); align-items: start;">
+      <div class="grid gap-6" :style="gridColumnsStyle">
         <div class="flex flex-col gap-6">
           <!-- Form (jen pro vlastníka) -->
           <section v-if="isOwner" class="grid gap-3 bg-neutral-900/60 p-4 rounded-2xl">
@@ -155,7 +155,7 @@
         </div>
 
         <!-- Pravý panel: Kapitoly -->
-        <aside class="chapters-panel bg-neutral-900/60 p-4 rounded-2xl sticky top-4">
+        <aside v-if="showUI" class="chapters-panel bg-neutral-900/60 p-4 rounded-2xl sticky top-4">
           <div class="flex items-center justify-between mb-2">
             <h2 class="font-semibold">Kapitoly</h2>
           </div>
@@ -277,6 +277,14 @@
 
         <div class="w-px h-6 bg-neutral-800 mx-1" />
         <button @click="addChapterNow" class="px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-sm">+ Kapitolu (teď)</button>
+        <div class="ml-auto" />
+        <button
+          @click="showUI = !showUI"
+          class="px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-sm"
+          :title="showUI ? 'Skrýt panely (kapitoly, filtry, správa)' : 'Zobrazit panely'"
+        >
+          {{ showUI ? '🗖' : '🗗' }}
+        </button>
       </div>
     </div>
 
@@ -325,6 +333,10 @@ const audioElementId   = ref(null) // ID dlaždice, která má hrát zvuk
 const activeAudioTeam  = ref('A')  // tým, z něhož má hrát zvuk (první *viditelný* stream)
 
 const isGloballyPaused = ref(false)
+// Unmute povolen až po uživatelské interakci (kvůli autoplay policy)
+const allowUnmute = ref(false)
+// Zobrazení/skrývání horních panelů a pravého panelu kapitol
+const showUI = ref(true)
 
 /** Kapitoly */
 const chapters = reactive([]) // [{ name: string, tSeconds: number }]
@@ -385,6 +397,11 @@ const combinedVisibleEntries = computed(() => {
   return list.filter(e => isVisible(e, (e.team || '').toUpperCase().trim()))
 })
 const totalVisibleCount = computed(() => combinedVisibleEntries.value.length)
+const gridColumnsStyle = computed(() => (
+  showUI.value
+    ? { gridTemplateColumns: '1fr minmax(260px, 18vw)', alignItems: 'start' }
+    : { gridTemplateColumns: '1fr', alignItems: 'start' }
+))
 
 /** ---------- Utility ---------- */
 function parseHMS(value) {
@@ -484,17 +501,19 @@ async function ensurePlayers() {
 function enforceSingleAudio() {
   for (const e of allEntries) {
     const p = players.get(e.elementId)
-    const shouldMute = !(audioElementId.value && e.elementId === audioElementId.value)
+    const shouldMute = !(audioElementId.value && e.elementId === audioElementId.value && allowUnmute.value)
     e.muted = shouldMute
     try { p?.setMuted?.(shouldMute) } catch {}
   }
 }
 function setAudio(item) {
+  allowUnmute.value = true
   audioElementId.value = item.elementId
   enforceSingleAudio()
   saveStateToURL()
 }
 function applyTeamAudio() {
+  allowUnmute.value = true
   const team = (activeAudioTeam.value || 'A').toUpperCase()
   const list = team === 'A' ? entriesTeamA.value : entriesTeamB.value
   const firstVisible = list.find(e => isVisible(e, team))
@@ -607,29 +626,76 @@ function restartAll() {
   flashOverlayAll('⏮️ Restart')
   status.value = `Spuštěno od offsetu u ${acted} přehrávačů.`
 }
-function resumeAll() {
-  let acted = 0
-  for (const item of allEntries) {
-    const p = players.get(item.elementId)
-    if (!p) continue
-    const shouldMute = !(audioElementId.value && item.elementId === audioElementId.value)
-    item.muted = shouldMute
-    try { p.setMuted(shouldMute) } catch {}
-    try { p.play(); acted++ } catch {}
-    setTimeout(() => { try { p.play() } catch {} }, 300)
-  }
-  isGloballyPaused.value = false
-  flashOverlayAll('▶️ Play')
-  status.value = `Pokračuji u ${acted} přehrávačů.`
-}
 function pauseAll() {
   let paused = 0
+  // pause all grid players
   for (const [, p] of players) {
     try { p.pause?.(); paused++ } catch {}
+    // belt-and-suspenders: try pausing again shortly after (some iframes ignore first call)
+    setTimeout(() => { try { p.pause?.() } catch {} }, 150)
+  }
+  // also pause focus player if open
+  if (focusPlayer) {
+    try { focusPlayer.pause?.() } catch {}
+    setTimeout(() => { try { focusPlayer.pause?.() } catch {} }, 150)
   }
   isGloballyPaused.value = true
   flashOverlayAll('⏸️ Pause')
   status.value = `Pozastaveno ${paused} přehrávačů.`
+}
+function resumeAll() {
+  let acted = 0
+
+  // 0) Ujisti se, že máme inicializované přehrávače
+  ensurePlayers().then(() => {
+    // 1) Všem nastavíme mute (autoplay policy)
+    for (const [, p] of players) {
+      try { p.setMuted(true) } catch {}
+    }
+    if (focusPlayer) {
+      try { focusPlayer.setMuted(true) } catch {}
+    }
+
+    // 2) Zkusíme spustit přehrávání u všech hráčů
+    for (const [, p] of players) {
+      try { p.play(); acted++ } catch {}
+      // druhý pokus o chvilku později
+      setTimeout(() => { try { p.play() } catch {} }, 200)
+      // třetí pokus: malý seek „šťouch“ a znovu play (některé iframy potřebují změnu pozice)
+      setTimeout(() => {
+        try {
+          const cur = typeof p.getCurrentTime === 'function' ? (p.getCurrentTime() || 0) : 0
+          if (cur >= 0) {
+            try { p.seek(Math.max(0, cur + 0.001)) } catch {}
+            try { p.play() } catch {}
+          }
+        } catch {}
+      }, 350)
+    }
+    if (focusPlayer) {
+      try { focusPlayer.play?.() } catch {}
+      setTimeout(() => { try { focusPlayer.play?.() } catch {} }, 200)
+      setTimeout(() => {
+        try {
+          const cur = typeof focusPlayer.getCurrentTime === 'function' ? (focusPlayer.getCurrentTime() || 0) : 0
+          if (cur >= 0) {
+            try { focusPlayer.seek(Math.max(0, cur + 0.001)) } catch {}
+            try { focusPlayer.play?.() } catch {}
+          }
+        } catch {}
+      }, 350)
+    }
+
+    // 3) Po chvíli znovu vynutíme pouze jeden audio stream
+    setTimeout(() => {
+      allowUnmute.value = true
+      enforceSingleAudio()
+    }, 500)
+
+    isGloballyPaused.value = false
+    flashOverlayAll('▶️ Play')
+    status.value = `Pokračuji u ${acted} přehrávačů.`
+  })
 }
 async function seekAll(deltaSeconds) {
   await loadTwitchSDK()
@@ -927,10 +993,22 @@ function loadStateFromURL() {
 
 /** ---------- lifecycle ---------- */
 let timerId = null
+// Automatické spuštění (ztlumeno) u všech přehrávačů po mountu
+async function autoStartAllMuted() {
+  await ensurePlayers()
+  let started = 0
+  for (const [, p] of players) {
+    try { p.setMuted(true) } catch {}
+    try { p.play(); started++ } catch {}
+    setTimeout(() => { try { p.play() } catch {} }, 200)
+  }
+  isGloballyPaused.value = false
+  status.value = `Automatické spuštění (ztlumeno) u ${started} přehrávačů.`
+}
 onMounted(async () => {
   const obj = loadStateFromURL()
   await ensurePlayers()
-  applyTeamAudio()
+  await autoStartAllMuted()
   window.addEventListener('keydown', handleKey, { passive: false })
   timerId = setInterval(tickGlobalElapsed, 1000)
 
@@ -961,9 +1039,10 @@ onUnmounted(() => {
 
 /** ---------- Hotkeys ---------- */
 function handleKey(e) {
-  // ignoruj globální hotkeys při psaní do inputů/textarea nebo contenteditable
   const t = e.target
+  // Při psaní do textových polí nezasahujeme
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+  // Když je fokus na SELECT/BUTTON/A, hotkeys necháme fungovat (případné defaulty zrušíme níže u konkrétních kláves)
 
   if (e.code === 'Space') {
     e.preventDefault()
@@ -973,8 +1052,14 @@ function handleKey(e) {
   }
   if (e.code === 'ArrowLeft') { e.preventDefault(); seekAll(-5); return }
   if (e.code === 'ArrowRight'){ e.preventDefault(); seekAll(5);  return }
-  if (e.code === 'Digit1') { activeAudioTeam.value = 'A'; applyTeamAudio(); flashOverlayAll('🔊 A'); return }
-  if (e.code === 'Digit2') { activeAudioTeam.value = 'B'; applyTeamAudio(); flashOverlayAll('🔊 B'); return }
+  if (e.code === 'Digit1') {
+    allowUnmute.value = true
+    activeAudioTeam.value = 'A'; applyTeamAudio(); flashOverlayAll('🔊 A'); return
+  }
+  if (e.code === 'Digit2') {
+    allowUnmute.value = true
+    activeAudioTeam.value = 'B'; applyTeamAudio(); flashOverlayAll('🔊 B'); return
+  }
   if (e.code === 'KeyS')   { e.preventDefault(); syncToCurrentGlobal(); return }
   if (e.code === 'Escape' && isFocusOpen.value) { e.preventDefault(); closeFocus(); return }
 }
