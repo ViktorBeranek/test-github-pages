@@ -1,0 +1,26 @@
+name: Coding standard
+on:
+    push:
+        branches-ignore:
+            - 'master'
+
+concurrency:
+    group: coding-standard-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    build:
+        name: Coding standard
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+
+        steps:
+            -   uses: actions/checkout@v3
+
+            -   name: Create ngnix proxy network
+                run: docker network create nginx-proxy
+
+            -   name: Start containers and CS
+                run: |
+                    docker compose -f docker-compose.yml -f docker-compose.ci.yml up composer
+                    docker compose run -T php-fpm vendor/bin/phpcs app/ tests/ --standard=vendor/sheepstudio/coding-standard/src/ruleset.xml -p

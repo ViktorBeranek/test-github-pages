@@ -1,0 +1,32 @@
+name: Integration tests
+on:
+  push:
+    branches-ignore:
+      - 'master'
+
+concurrency:
+  group: integration-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      -   uses: actions/checkout@v3
+
+      -   name: Create ngnix proxy network
+          run: docker network create nginx-proxy
+
+      -   name: Start containers and integration test
+          run: |
+            docker compose -f docker-compose.yml -f docker-compose.ci.all.yml up -d
+            docker compose -f docker-compose.yml -f docker-compose.ci.all.yml up composer
+            docker compose exec -T php-fpm bin/console rabbitmq:declareQueuesAndExchanges
+            echo $(sh ./tests/migrations/migrate_structure.sh)
+            docker compose exec -T php-fpm chmod a+rwx log temp www tests -R
+            docker compose -f docker-compose.yml -f docker-compose.ci.all.yml exec -T database-test pg_dump --no-comments  --dbname=sheeptest --username=sheep --role=sheep --data-only --disable-triggers --inserts --file=/var/lib/postgresql/data.sql
+            echo $(sed -e "s/--.*//" -e '/^$$/d' tests/data.sql > tests/data_clean.sql)
+            docker compose exec -T php-fpm vendor/bin/phpunit --testsuite integration --colors=always

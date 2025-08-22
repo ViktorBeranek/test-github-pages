@@ -1,0 +1,26 @@
+name: Unit tests
+on:
+    push:
+        branches-ignore:
+            - 'master'
+
+concurrency:
+    group: unit-tests-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    build:
+        name: Unit tests
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+
+        steps:
+            -   uses: actions/checkout@v3
+
+            -   name: Create ngnix proxy network
+                run: docker network create nginx-proxy
+
+            -   name: Start containers and unit test
+                run: |
+                    docker compose -f docker-compose.yml -f docker-compose.ci.yml up composer
+                    docker compose run -T php-fpm vendor/bin/phpunit --testsuite unit --colors=always
