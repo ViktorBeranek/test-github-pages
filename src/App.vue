@@ -155,7 +155,7 @@
         </div>
 
         <!-- Pravý panel: Kapitoly -->
-        <aside class="bg-neutral-900/60 p-4 rounded-2xl sticky top-4">
+        <aside class="chapters-panel bg-neutral-900/60 p-4 rounded-2xl sticky top-4">
           <div class="flex items-center justify-between mb-2">
             <h2 class="font-semibold">Kapitoly</h2>
           </div>
@@ -1077,4 +1077,14 @@ const Tile = defineComponent({
 
 <style scoped>
 /* nic speciálního navíc */
+
+.chapters-panel {
+  /* sticky top-4 already keeps it pinned; limit height and enable internal scroll */
+  max-height: calc(100vh - 7rem);
+  overflow: auto;
+}
+/* optional, subtle scrollbar */
+.chapters-panel::-webkit-scrollbar { width: 8px; height: 8px; }
+.chapters-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 9999px; }
+.chapters-panel::-webkit-scrollbar-track { background: transparent; }
 </style>
