@@ -1,4 +1,0 @@
-change-template: '- $TITLE (@$AUTHOR, PR #$NUMBER)'
-template: '$CHANGES'
-exclude-labels:
-  - 'skip-release'
