@@ -104,15 +104,15 @@
           <!-- Pokud jsou viditelné přesně 2 streamy, zobraz je vedle sebe v jedné mřížce bez ohledu na tým -->
           <section v-if="totalVisibleCount === 2" class="grid gap-4" :style="gridStyleFor(2)">
             <Tile
-              v-for="item in combinedVisibleEntries"
-              :key="item.elementId"
-              :item="item"
-              :audio-element-id="audioElementId"
-              @set-audio="setAudio(item)"
-              @toggle-mute="toggleMute(item)"
-              @remove="removeByElementId(item.elementId)"
-              @update-offset="updateTileOffset(item, $event)"
-              @focus="openFocus(item)"
+                v-for="item in combinedVisibleEntries"
+                :key="item.elementId"
+                :item="item"
+                :audio-element-id="audioElementId"
+                @set-audio="setAudio(item)"
+                @toggle-mute="toggleMute(item)"
+                @remove="removeByElementId(item.elementId)"
+                @update-offset="updateTileOffset(item, $event)"
+                @focus="openFocus(item)"
             />
           </section>
 
@@ -122,16 +122,16 @@
             <h3 class="text-lg font-semibold">Tým A</h3>
             <section class="grid gap-4" :style="gridStyleFor(visibleCount(entriesTeamA))">
               <Tile
-                v-for="item in entriesTeamA"
-                :key="item.elementId"
-                :item="item"
-                :audio-element-id="audioElementId"
-                v-show="isVisible(item, 'A')"
-                @set-audio="setAudio(item)"
-                @toggle-mute="toggleMute(item)"
-                @remove="removeByElementId(item.elementId)"
-                @update-offset="updateTileOffset(item, $event)"
-                @focus="openFocus(item)"
+                  v-for="item in entriesTeamA"
+                  :key="item.elementId"
+                  :item="item"
+                  :audio-element-id="audioElementId"
+                  v-show="isVisible(item, 'A')"
+                  @set-audio="setAudio(item)"
+                  @toggle-mute="toggleMute(item)"
+                  @remove="removeByElementId(item.elementId)"
+                  @update-offset="updateTileOffset(item, $event)"
+                  @focus="openFocus(item)"
               />
             </section>
 
@@ -139,16 +139,16 @@
             <h3 class="text-lg font-semibold mt-4">Tým B</h3>
             <section class="grid gap-4" :style="gridStyleFor(visibleCount(entriesTeamB))">
               <Tile
-                v-for="item in entriesTeamB"
-                :key="item.elementId"
-                :item="item"
-                :audio-element-id="audioElementId"
-                v-show="isVisible(item, 'B')"
-                @set-audio="setAudio(item)"
-                @toggle-mute="toggleMute(item)"
-                @remove="removeByElementId(item.elementId)"
-                @update-offset="updateTileOffset(item, $event)"
-                @focus="openFocus(item)"
+                  v-for="item in entriesTeamB"
+                  :key="item.elementId"
+                  :item="item"
+                  :audio-element-id="audioElementId"
+                  v-show="isVisible(item, 'B')"
+                  @set-audio="setAudio(item)"
+                  @toggle-mute="toggleMute(item)"
+                  @remove="removeByElementId(item.elementId)"
+                  @update-offset="updateTileOffset(item, $event)"
+                  @focus="openFocus(item)"
               />
             </section>
           </template>
@@ -279,9 +279,9 @@
         <button @click="addChapterNow" class="px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-sm">+ Kapitolu (teď)</button>
         <div class="ml-auto" />
         <button
-          @click="showUI = !showUI"
-          class="px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-sm"
-          :title="showUI ? 'Skrýt panely (kapitoly, filtry, správa)' : 'Zobrazit panely'"
+            @click="showUI = !showUI"
+            class="px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-sm"
+            :title="showUI ? 'Skrýt panely (kapitoly, filtry, správa)' : 'Zobrazit panely'"
         >
           {{ showUI ? '🗖' : '🗗' }}
         </button>
@@ -375,6 +375,7 @@ function matchesPlayerFilter(e) {
   const name = (e.playerName || e.label || '').trim()
   return selectedPlayers.value.includes(name)
 }
+
 function isVisible(item, team) {
   if (filterTeam.value === 'A' && team !== 'A') return false
   if (filterTeam.value === 'B' && team !== 'B') return false
@@ -398,9 +399,9 @@ const combinedVisibleEntries = computed(() => {
 })
 const totalVisibleCount = computed(() => combinedVisibleEntries.value.length)
 const gridColumnsStyle = computed(() => (
-  showUI.value
-    ? { gridTemplateColumns: '1fr minmax(260px, 18vw)', alignItems: 'start' }
-    : { gridTemplateColumns: '1fr', alignItems: 'start' }
+    showUI.value
+        ? { gridTemplateColumns: '1fr minmax(260px, 18vw)', alignItems: 'start' }
+        : { gridTemplateColumns: '1fr', alignItems: 'start' }
 ))
 
 /** ---------- Utility ---------- */
@@ -712,6 +713,12 @@ async function seekAll(deltaSeconds) {
   updateSelectedChapterByTime(getGlobalElapsedSeconds())
   flashOverlayAll(deltaSeconds >= 0 ? (deltaSeconds >= 60 ? '⏩ +60s' : '⏩ +5s') : (Math.abs(deltaSeconds) >= 60 ? '⏪ −60s' : '⏪ −5s'))
   status.value = `${deltaSeconds >= 0 ? 'Posunuto vpřed' : 'Vráceno zpět'} o ${Math.abs(deltaSeconds)}s u ${changed} přehrávačů.`
+
+  // Po seeku znovu vynutit audio (některé přehrávače se přepnou do mute)
+  setTimeout(() => {
+    allowUnmute.value = true
+    enforceSingleAudio()
+  }, 80)
 }
 
 /** ---------- Globální čas, kapitoly, sync ---------- */
@@ -745,6 +752,12 @@ function syncToCurrentGlobal() {
     try { focusPlayer.seek(target) } catch {}
   }
   flashOverlayAll('🔄 Sync')
+
+  // Po synchronizaci některé iframy Twitch znovu ztlumí – znovu vynutíme jediný audio stream
+  setTimeout(() => {
+    allowUnmute.value = true
+    enforceSingleAudio()
+  }, 80)
 }
 function seekAllToGlobalTarget() {
   const t = parseHMS(globalTargetHms.value)
@@ -760,6 +773,12 @@ function seekAllToGlobalTarget() {
   }
   updateSelectedChapterByTime(t)
   flashOverlayAll('🔄 Sync')
+
+  // Udržet zvuk po přeskočení na konkrétní T
+  setTimeout(() => {
+    allowUnmute.value = true
+    enforceSingleAudio()
+  }, 80)
 }
 
 /** Kapitoly */
